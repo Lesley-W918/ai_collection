@@ -1,0 +1,5 @@
+{
+  "name": "AI 选型助手 (AI Selector)",
+  "description": "一个为非技术小白设计的极简 AI 产品筛选工具，支持意图识别与大白话对比。",
+  "requestFramePermissions": []
+}
