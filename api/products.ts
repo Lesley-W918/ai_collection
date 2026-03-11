@@ -153,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     try {
       const blob = await put(BLOB_KEY, JSON.stringify(products), {
-        access: 'public',
+        access: 'private',
         allowOverwrite: true,
         contentType: 'application/json',
         token: process.env.BLOB_READ_WRITE_TOKEN,
