@@ -330,7 +330,27 @@ const ProductCard: React.FC<{ product: Product }> = ({ product }) => {
 
 export default function App() {
   const [selectedModality, setSelectedModality] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(''); 
+  const [isListening, setIsListening] = useState(false);
+
+const handleVoiceInput = () => {
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert('你的浏览器不支持语音输入，建议使用 Chrome');
+    return;
+  }
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'zh-CN';
+  recognition.interimResults = false;
+  recognition.onstart = () => setIsListening(true);
+  recognition.onend = () => setIsListening(false);
+  recognition.onresult = (event: any) => {
+    const transcript = event.results[0][0].transcript;
+    setQuery(transcript);
+  };
+  recognition.onerror = () => setIsListening(false);
+  recognition.start();
+};
 
   // --- Intent Recognition Logic ---
   const filteredProducts = useMemo(() => {
@@ -423,9 +443,12 @@ export default function App() {
             placeholder="用大白话描述你想解决的问题（如：我想给爷爷奶奶做一张会说话的电子贺卡）"
             className="w-full pl-14 pr-16 py-5 bg-white rounded-2xl shadow-sm border border-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-800/10 focus:border-stone-300 transition-all text-stone-800 placeholder:text-stone-300"
           />
-          <button className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-stone-300 hover:text-stone-800 transition-colors">
-            <Mic size={20} />
-          </button>
+<button 
+  onClick={handleVoiceInput}
+  className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-stone-300 hover:text-stone-800'}`}
+>
+  <Mic size={20} />
+</button>
         </div>
       </header>
 
@@ -472,7 +495,7 @@ export default function App() {
 
       {/* Footer Decoration */}
       <footer className="mt-40 text-center opacity-20 pointer-events-none">
-        <div className="serif text-8xl font-black select-none">AI SELECTOR</div>
+        <div className="serif font-black select-none" style={{fontSize: '9px', letterSpacing: '0.05em'}}>AI SELECTOR</div>
       </footer>
     </div>
   );
