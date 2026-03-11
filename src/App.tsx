@@ -20,6 +20,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Analytics } from '@vercel/analytics/react';
 
 // --- Data Structure ---
 interface Product {
@@ -732,6 +733,7 @@ export default function App() {
       <footer className="mt-40 text-center opacity-20 pointer-events-none">
         <div className="serif font-black select-none" style={{fontSize: '9px', letterSpacing: '0.05em'}}>AI SELECTOR</div>
       </footer>
+      <Analytics />
     </div>
   );
 }
