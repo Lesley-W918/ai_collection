@@ -605,8 +605,19 @@ export default function App() {
     return results;
   }, [selectedModality, query, products]);
 
-  const displayProducts = aiResults?.products.length ? aiResults.products : keywordFilteredProducts;
-  const isAiMode = !!aiResults?.products.length;
+  // 筛选标签作为强制条件，AI结果在其范围内排序
+  const displayProducts = useMemo(() => {
+    if (aiResults?.products.length) {
+      // AI模式：先用AI排序，再强制过滤标签
+      const aiFiltered = selectedModality
+        ? aiResults.products.filter(p => p.modality === selectedModality)
+        : aiResults.products;
+      // 如果标签过滤后没有结果，降级显示关键词匹配结果
+      return aiFiltered.length > 0 ? aiFiltered : keywordFilteredProducts;
+    }
+    return keywordFilteredProducts;
+  }, [aiResults, selectedModality, keywordFilteredProducts]);
+  const isAiMode = !!(aiResults?.products.length && (!selectedModality || displayProducts.some(p => aiResults.products.includes(p))));
 
   return (
     <div className="min-h-screen pb-20">
@@ -643,7 +654,14 @@ export default function App() {
             type="text"
             value={query}
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="用大白话描述你想解决的问题（如：我想给爷爷奶奶做一张会说话的电子贺卡）"
+            placeholder={
+              selectedModality === 'text' ? '在文字工具里找什么？（如：免费的、能帮我写论文的）' :
+              selectedModality === 'image' ? '在图片工具里找什么？（如：国内直连、免费画插画）' :
+              selectedModality === 'audio' ? '在音频工具里找什么？（如：做生日歌、克隆声音）' :
+              selectedModality === 'video' ? '在视频工具里找什么？（如：照片动起来、国内可用）' :
+              selectedModality === 'general' ? '在综合工具里找什么？（如：免费的、能做PPT的）' :
+              '用大白话描述你想解决的问题（如：我想给爷爷奶奶做一张会说话的电子贺卡）'
+            }
             className="w-full pl-14 pr-16 py-5 bg-white rounded-2xl shadow-sm border border-stone-100 focus:outline-none focus:ring-2 focus:ring-stone-800/10 focus:border-stone-300 transition-all text-stone-800 placeholder:text-stone-300"
           />
           <button 
@@ -667,7 +685,12 @@ export default function App() {
                 <Sparkles size={16} className="text-amber-500" />
                 <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">AI 意图识别</span>
               </div>
-              <p className="text-sm text-amber-800 leading-relaxed mb-3">{aiResults.reasoning}</p>
+              <p className="text-sm text-amber-800 leading-relaxed mb-3">
+                {aiResults.reasoning}
+                {selectedModality && aiResults.products.some(p => p.modality !== selectedModality) && (
+                  <span className="ml-2 text-xs text-amber-600 opacity-75">· 已按「{{'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'}[selectedModality]}」筛选</span>
+                )}
+              </p>
               {aiResults.detectedNeeds.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {aiResults.detectedNeeds.map((need, i) => (
