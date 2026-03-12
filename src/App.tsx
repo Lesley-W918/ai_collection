@@ -606,18 +606,24 @@ export default function App() {
   }, [selectedModality, query, products]);
 
   // 筛选标签作为强制条件，AI结果在其范围内排序
+  const aiFilteredProducts = useMemo(() => {
+    if (!aiResults?.products.length) return [];
+    if (!selectedModality) return aiResults.products;
+    return aiResults.products.filter(p => p.modality === selectedModality);
+  }, [aiResults, selectedModality]);
+
   const displayProducts = useMemo(() => {
     if (aiResults?.products.length) {
-      // AI模式：先用AI排序，再强制过滤标签
-      const aiFiltered = selectedModality
-        ? aiResults.products.filter(p => p.modality === selectedModality)
-        : aiResults.products;
-      // 如果标签过滤后没有结果，降级显示关键词匹配结果
-      return aiFiltered.length > 0 ? aiFiltered : keywordFilteredProducts;
+      // 有AI结果：优先用AI过滤后的，过滤为空时仍展示AI结果（不降级到关键词匹配）
+      return aiFilteredProducts.length > 0 ? aiFilteredProducts : aiResults.products;
     }
     return keywordFilteredProducts;
-  }, [aiResults, selectedModality, keywordFilteredProducts]);
-  const isAiMode = !!(aiResults?.products.length && (!selectedModality || displayProducts.some(p => aiResults.products.includes(p))));
+  }, [aiResults, aiFilteredProducts, keywordFilteredProducts]);
+
+  // AI模式：有AI结果就算AI模式，标签过滤为空时也保持AI模式
+  const isAiMode = !!aiResults?.products.length;
+  // 标签和AI结果有冲突时提示
+  const hasModalityConflict = !!selectedModality && !!aiResults?.products.length && aiFilteredProducts.length === 0;
 
   return (
     <div className="min-h-screen pb-20">
@@ -687,8 +693,11 @@ export default function App() {
               </div>
               <p className="text-sm text-amber-800 leading-relaxed mb-3">
                 {aiResults.reasoning}
-                {selectedModality && aiResults.products.some(p => p.modality !== selectedModality) && (
-                  <span className="ml-2 text-xs text-amber-600 opacity-75">· 已按「{{'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'}[selectedModality]}」筛选</span>
+                {hasModalityConflict && (
+                  <span className="ml-2 text-xs text-amber-600">· AI推荐的产品不在「{({'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'} as any)[selectedModality!]}」分类里，已显示AI原始推荐</span>
+                )}
+                {selectedModality && !hasModalityConflict && aiFilteredProducts.length < (aiResults?.products.length ?? 0) && (
+                  <span className="ml-2 text-xs text-amber-600 opacity-75">· 已按「{({'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'} as any)[selectedModality]}」筛选</span>
                 )}
               </p>
               {aiResults.detectedNeeds.length > 0 && (
@@ -726,7 +735,7 @@ export default function App() {
                 <ProductCard 
                   key={product.id} 
                   product={product}
-                  aiReason={isAiMode && index === 0 ? `最佳匹配：${aiResults?.reasoning?.slice(0, 60)}...` : undefined}
+                  aiReason={undefined}
                 />
               ))}
             </motion.div>
