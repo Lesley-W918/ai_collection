@@ -321,19 +321,23 @@ const PRODUCTS: Product[] = [
 ];
 
 // --- AI Intent Recognition ---
-async function recognizeIntent(userQuery: string, productsList: Product[]): Promise<{
+async function recognizeIntent(userQuery: string, productsList: Product[], modalityHint?: string | null): Promise<{
   recommendedIds: string[];
   reasoning: string;
   detectedNeeds: string[];
 }> {
+  const modalityNames: Record<string, string> = { text:'文字', image:'图片', audio:'音频', video:'视频', general:'综合' };
+  const modalityNote = modalityHint ? `\n\n【重要提示】用户已选择「${modalityNames[modalityHint] || modalityHint}」类别标签，请优先推荐 modality 为 "${modalityHint}" 的产品，只有在该类别完全没有匹配时才推荐其他类别。` : '';
   const productList = productsList.map(p => 
-    `- ${p.id} (${p.name}): ${p.description} 关键词: ${p.keywords.join(', ')} 模态: ${p.modality} 是否国内直连: ${p.chinaFriendly} 难度: ${p.difficulty} 费用: ${p.isPaid}`
+    `[ID必须用: ${p.id}] ${p.name}: ${p.description} | 关键词: ${p.keywords.join(', ')} | 类型: ${p.modality} | 国内直连: ${p.chinaFriendly} | 难度: ${p.difficulty} | 费用: ${p.isPaid}`
   ).join('\n');
+
+  const idList = productsList.map(p => p.id).join(', ');
 
   const response = await fetch('/api/intent', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: userQuery, productList })
+    body: JSON.stringify({ query: userQuery + modalityNote, productList, idList })
   });
 
   if (!response.ok) {
@@ -539,7 +543,7 @@ export default function App() {
   };
 
   // --- AI Search ---
-  const handleAiSearch = async (searchQuery: string) => {
+  const handleAiSearch = async (searchQuery: string, modalityHint?: string | null) => {
     if (!searchQuery.trim() || searchQuery.trim().length < 4) {
       setAiResults(null);
       return;
@@ -547,12 +551,29 @@ export default function App() {
     setIsAnalyzing(true);
     setAiError(null);
     try {
-      const result = await recognizeIntent(searchQuery, products);
-      const matchedProducts = result.recommendedIds
-        .map(id => products.find(p => p.id === id))
-        .filter(Boolean) as Product[];
+      const result = await recognizeIntent(searchQuery, products, modalityHint);
+      // FIX: case-insensitive ID matching to prevent empty results
+      // Robust matching: exact → lowercase → name contains → keyword fallback
+      const matchedProducts = result.recommendedIds.map(id => {
+        const normalized = id.toLowerCase().trim();
+        // 1. Exact match
+        let p = products.find(p => p.id === id);
+        if (p) return p;
+        // 2. Case-insensitive ID match
+        p = products.find(p => p.id.toLowerCase().trim() === normalized);
+        if (p) return p;
+        // 3. Product name contains the ID (e.g. AI returns "kimi" and name is "Kimi 智能助手")
+        p = products.find(p => p.name.toLowerCase().includes(normalized) || normalized.includes(p.id.toLowerCase()));
+        if (p) return p;
+        console.warn('Unmatched ID from AI:', id, '| Available IDs:', products.map(p => p.id));
+        return null;
+      }).filter(Boolean) as Product[];
+
+      // Deduplicate (in case fuzzy matching returned duplicates)
+      const seen = new Set<string>();
+      const deduped = matchedProducts.filter(p => seen.has(p.id) ? false : (seen.add(p.id), true));
       setAiResults({
-        products: matchedProducts,
+        products: deduped,
         reasoning: result.reasoning,
         detectedNeeds: result.detectedNeeds
       });
@@ -577,7 +598,7 @@ export default function App() {
       return;
     }
     debounceRef.current = setTimeout(() => {
-      handleAiSearch(value);
+      handleAiSearch(value, selectedModality);
     }, 800);
   };
 
@@ -689,17 +710,19 @@ export default function App() {
             >
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles size={16} className="text-amber-500" />
-                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">AI 意图识别</span>
+                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">我猜你想找的是…</span>
               </div>
-              <p className="text-sm text-amber-800 leading-relaxed mb-3">
+              <p className="text-base text-amber-900 font-medium leading-relaxed mb-2">
                 {aiResults.reasoning}
-                {hasModalityConflict && (
-                  <span className="ml-2 text-xs text-amber-600">· AI推荐的产品不在「{({'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'} as any)[selectedModality!]}」分类里，已显示AI原始推荐</span>
-                )}
-                {selectedModality && !hasModalityConflict && aiFilteredProducts.length < (aiResults?.products.length ?? 0) && (
-                  <span className="ml-2 text-xs text-amber-600 opacity-75">· 已按「{({'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'} as any)[selectedModality]}」筛选</span>
-                )}
               </p>
+              {(hasModalityConflict || (selectedModality && !hasModalityConflict && aiFilteredProducts.length < (aiResults?.products.length ?? 0))) && (
+                <p className="text-xs text-amber-600 mb-2">
+                  {hasModalityConflict
+                    ? `⚠️ AI推荐的产品不在「${({'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'} as any)[selectedModality!]}」分类里，已显示全部AI推荐`
+                    : `· 已按「${({'text':'文字','image':'图片','audio':'音频','video':'视频','general':'综合'} as any)[selectedModality!]}」筛选`
+                  }
+                </p>
+              )}
               {aiResults.detectedNeeds.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {aiResults.detectedNeeds.map((need, i) => (
