@@ -160,44 +160,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const productsJson = JSON.stringify(products);
 
       // Upsert PRODUCTS_DATA env var
-      const response = await fetch(
-        `https://api.vercel.com/v10/projects/${projectId}/env`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            key: 'PRODUCTS_DATA',
-            value: productsJson,
-            type: 'plain',
-            target: ['production'],
-          }),
-        }
+      // Always: find existing env var first, then update or create
+      const listRes = await fetch(
+        `https://api.vercel.com/v10/projects/${projectId}/env?limit=100`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
+      const listData = await listRes.json();
+      const existing = listData.envs?.find((e: any) => e.key === 'PRODUCTS_DATA');
 
-      if (response.status === 409) {
-        // Already exists, find and update it
-        const listRes = await fetch(
-          `https://api.vercel.com/v10/projects/${projectId}/env`,
-          { headers: { Authorization: `Bearer ${token}` } }
+      if (existing) {
+        // Update existing
+        const patchRes = await fetch(
+          `https://api.vercel.com/v10/projects/${projectId}/env/${existing.id}`,
+          {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: productsJson, target: ['production'] }),
+          }
         );
-        const listData = await listRes.json();
-        const existing = listData.envs?.find((e: any) => e.key === 'PRODUCTS_DATA');
-        if (existing) {
-          await fetch(
-            `https://api.vercel.com/v10/projects/${projectId}/env/${existing.id}`,
-            {
-              method: 'PATCH',
-              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ value: productsJson, target: ['production'] }),
-            }
-          );
+        if (!patchRes.ok) {
+          const err = await patchRes.text();
+          throw new Error('PATCH failed: ' + err);
         }
-      } else if (!response.ok) {
-        const err = await response.text();
-        throw new Error(err);
+      } else {
+        // Create new
+        const postRes = await fetch(
+          `https://api.vercel.com/v10/projects/${projectId}/env`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: 'PRODUCTS_DATA',
+              value: productsJson,
+              type: 'plain',
+              target: ['production'],
+            }),
+          }
+        );
+        if (!postRes.ok) {
+          const err = await postRes.text();
+          throw new Error('POST failed: ' + err);
+        }
       }
 
       return res.status(200).json({ success: true, message: `已保存 ${products.length} 个产品（下次部署后生效）` });
